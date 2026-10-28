@@ -1,0 +1,6 @@
+import { useEffect, useState } from 'react'
+import { ArrowLeft, Dumbbell, Layers3, Trophy } from 'lucide-react'
+import { listWorkoutHistory } from '../workout/api'
+import { dashboardSummary } from '../../lib/dashboard'
+
+export function Dashboard({onBack}:{onBack:()=>void}){const[sessions,setSessions]=useState<any[]>([]);useEffect(()=>{listWorkoutHistory().then(setSessions)},[]);const summary=dashboardSummary(sessions.map(session=>({status:session.status,sets:session.workout_session_exercises.flatMap((exercise:any)=>exercise.workout_sets)})));return <main className="history-page"><header><button className="icon" onClick={onBack}><ArrowLeft/></button><div><p className="eyebrow">INÍCIO</p><h1>Seu progresso</h1></div></header><section className="stat-grid"><article><Dumbbell/><strong>{summary.completedSessions}</strong><span>treinos concluídos</span></article><article><Layers3/><strong>{summary.completedSets}</strong><span>séries realizadas</span></article><article><Trophy/><strong>{summary.volume.toLocaleString('pt-BR')} kg</strong><span>volume total</span></article></section>{!sessions.length&&<div className="empty"><h2>Pronto para começar?</h2><p>Conclua um treino para gerar estatísticas reais.</p></div>}</main>}

@@ -1,0 +1,2 @@
+type Session = { status:string; started_at?:string; sets:Array<{completed_at:string|null;load_kg:number|null;repetitions:number}> }
+export function dashboardSummary(sessions: Session[]) { const completed=sessions.filter(session=>session.status==='completed');const sets=completed.flatMap(session=>session.sets).filter(set=>set.completed_at);return {completedSessions:completed.length,completedSets:sets.length,volume:sets.reduce((total,set)=>total+(set.load_kg??0)*set.repetitions,0)} }
