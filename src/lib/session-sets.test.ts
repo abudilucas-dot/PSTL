@@ -1,0 +1,9 @@
+import { expect, it } from 'vitest'
+import { nextSetNumber, canRemoveSet } from './session-sets'
+
+it('only removes an unfinished set when another set remains', () => {
+  expect(nextSetNumber([{ set_number: 1 }, { set_number: 3 }])).toBe(4)
+  expect(canRemoveSet([{ completed_at: null }, { completed_at: null }], { completed_at: null })).toBe(true)
+  expect(canRemoveSet([{ completed_at: null }], { completed_at: null })).toBe(false)
+  expect(canRemoveSet([{ completed_at: null }, { completed_at: null }], { completed_at: '2026-10-28T00:00:00Z' })).toBe(false)
+})
