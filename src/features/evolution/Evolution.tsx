@@ -5,6 +5,7 @@ import { listWorkoutHistory } from '../workout/api'
 import { bodyWeightPoints, measurementSummary, weeklyTrainingPoints } from '../../lib/evolution'
 import { bmi, hasMeasurementValue } from '../../lib/measurements'
 import { supabase } from '../../lib/supabase'
+import { formatTrainingVolume, formatVolumeTooltip } from '../../lib/volume'
 
 type Measurement = {
   id: string
@@ -93,10 +94,11 @@ export function Evolution({ onBack }: { onBack: () => void }) {
     <section className="stat-grid evolution-stats">
       <article><BarChart3 /><strong>{totals.sessions}</strong><span>treinos concluídos</span></article>
       <article><Ruler /><strong>{totals.sets}</strong><span>séries realizadas</span></article>
-      <article><LineChartIcon /><strong>{totals.volume.toLocaleString('pt-BR')} kg</strong><span>volume registrado</span></article>
+      <article><LineChartIcon /><strong>{formatTrainingVolume(totals.volume)}</strong><span>volume movimentado</span></article>
     </section>
+    <p className="volume-explanation">Volume movimentado é a soma de carga × repetições em cada série concluída. Não é um único levantamento.</p>
     <section className="chart-grid">
-      <article className="chart-card"><h2>Volume semanal</h2>{weeklyPoints.length ? <ResponsiveContainer width="100%" height={240}><BarChart data={weeklyPoints}><CartesianGrid stroke="#3b5142" vertical={false} /><XAxis dataKey="week" stroke="#a9b8ae" /><YAxis stroke="#a9b8ae" /><Tooltip contentStyle={{ background: '#19261e', border: '1px solid #3b5142' }} /><Bar dataKey="volume" name="Volume (kg)" fill="#7ddc99" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer> : <p className="chart-empty">Conclua treinos para visualizar seu volume semanal.</p>}</article>
+      <article className="chart-card"><h2>Volume semanal</h2>{weeklyPoints.length ? <ResponsiveContainer width="100%" height={240}><BarChart data={weeklyPoints}><CartesianGrid stroke="#3b5142" vertical={false} /><XAxis dataKey="week" stroke="#a9b8ae" /><YAxis stroke="#a9b8ae" tickFormatter={formatTrainingVolume} /><Tooltip contentStyle={{ background: '#19261e', border: '1px solid #3b5142' }} formatter={value => formatVolumeTooltip(Number(value))} /><Bar dataKey="volume" name="Volume" fill="#7ddc99" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer> : <p className="chart-empty">Conclua treinos para visualizar seu volume semanal.</p>}</article>
       <article className="chart-card"><h2>Peso corporal</h2>{weightPoints.length ? <ResponsiveContainer width="100%" height={240}><LineChart data={weightPoints}><CartesianGrid stroke="#3b5142" vertical={false} /><XAxis dataKey="date" stroke="#a9b8ae" /><YAxis stroke="#a9b8ae" domain={['dataMin - 1', 'dataMax + 1']} /><Tooltip contentStyle={{ background: '#19261e', border: '1px solid #3b5142' }} /><Line type="monotone" dataKey="weight" name="Peso (kg)" stroke="#a8e6b7" strokeWidth={3} dot={{ fill: '#a8e6b7' }} /></LineChart></ResponsiveContainer> : <p className="chart-empty">Salve seu peso para acompanhar a evolução corporal.</p>}</article>
     </section>
     <section className="measurements full-measurements">

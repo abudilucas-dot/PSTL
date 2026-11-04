@@ -4,6 +4,7 @@ import { listWorkoutHistory } from '../workout/api'
 import { dashboardSummary } from '../../lib/dashboard'
 import { bmi, hasMeasurementValue } from '../../lib/measurements'
 import { supabase } from '../../lib/supabase'
+import { formatTrainingVolume } from '../../lib/volume'
 
 type Measurement = {
   id: string
@@ -86,7 +87,7 @@ export function Dashboard({ onBack }: { onBack: () => void }) {
     <section className="stat-grid">
       <article><Dumbbell /><strong>{summary.completedSessions}</strong><span>treinos concluídos</span></article>
       <article><Layers3 /><strong>{summary.completedSets}</strong><span>séries realizadas</span></article>
-      <article><Trophy /><strong>{summary.volume.toLocaleString('pt-BR')} kg</strong><span>volume total</span></article>
+      <article><Trophy /><strong>{formatTrainingVolume(summary.volume)}</strong><span>volume movimentado</span></article>
     </section>
 
     <section className="measurements">
