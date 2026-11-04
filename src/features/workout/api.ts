@@ -1,5 +1,6 @@
 import { supabase } from '../../lib/supabase'
 import type { PlanExerciseInput } from '../../lib/plan'
+import type { FamilyMember, FamilySession } from '../../lib/family'
 
 const db = () => { if (!supabase) throw new Error('Supabase não configurado.'); return supabase }
 export type ActiveSession = { id:string; status:string; started_at:string; workout_session_exercises: Array<{id:string;exercise_name:string;position:number;planned_sets:number;planned_repetitions:string;rest_seconds:number;workout_sets:Array<{id?:string;set_number:number;load_kg:number|null;repetitions:number;completed_at:string|null}>}> }
@@ -20,3 +21,18 @@ export async function cancelWorkout(id:string){const {error}=await db().from('wo
 export async function addWorkoutSet(sessionExerciseId:string,setNumber:number){const {data,error}=await db().from('workout_sets').insert({session_exercise_id:sessionExerciseId,set_number:setNumber,repetitions:0}).select().single();if(error)throw error;return data}
 export async function removeWorkoutSet(sessionExerciseId:string,setNumber:number){const {error}=await db().from('workout_sets').delete().eq('session_exercise_id',sessionExerciseId).eq('set_number',setNumber).is('completed_at',null);if(error)throw error}
 export async function listWorkoutHistory(){const client=db();const {data:{user}}=await client.auth.getUser();if(!user)return[];const {data,error}=await client.from('workout_sessions').select('id,status,started_at,completed_at,plan_snapshot,workout_session_exercises(exercise_name,workout_sets(completed_at,load_kg,repetitions))').eq('owner_id',user.id).in('status',['completed','cancelled']).order('started_at',{ascending:false});if(error)throw error;return data}
+export async function listFamilyProgress(): Promise<{ members: FamilyMember[]; sessions: FamilySession[] }> {
+  const client = db()
+  const { data: { user } } = await client.auth.getUser()
+  if (!user) throw new Error('Sessão expirada.')
+  const { data: viewer, error: viewerError } = await client.from('profiles').select('family_group_id').eq('id', user.id).single()
+  if (viewerError) throw viewerError
+  if (!viewer.family_group_id) return { members: [], sessions: [] }
+  const [{ data: members, error: memberError }, { data: sessions, error: sessionError }] = await Promise.all([
+    client.from('profiles').select('id,display_name').eq('family_group_id', viewer.family_group_id).order('display_name'),
+    client.from('workout_sessions').select('owner_id,status,started_at,plan_snapshot,workout_session_exercises(workout_sets(completed_at,load_kg,repetitions))').in('status', ['completed', 'cancelled']).order('started_at', { ascending: false }),
+  ])
+  if (memberError) throw memberError
+  if (sessionError) throw sessionError
+  return { members: (members ?? []) as FamilyMember[], sessions: (sessions ?? []) as FamilySession[] }
+}
