@@ -14,6 +14,7 @@ import { History } from './features/history/History'
 import { Dashboard } from './features/dashboard/Dashboard'
 
 const Evolution = lazy(() => import('./features/evolution/Evolution').then(module => ({ default: module.Evolution })))
+const ExerciseLibrary = lazy(() => import('./features/exercises/ExerciseLibrary').then(module => ({ default: module.ExerciseLibrary })))
 
 type Exercise = { id: string; name: string; muscle_group: string }
 type Plan = WorkoutPlanInput & { id: string; archived_at?: string | null }
@@ -47,7 +48,7 @@ export default function App() {
   const [starting, setStarting] = useState(false)
   const [active, setActive] = useState<ActiveSession | null>(null)
   const [runnerDismissed, setRunnerDismissed] = useState(false)
-  const [screen, setScreen] = useState<'plans' | 'history' | 'dashboard' | 'evolution'>('plans')
+  const [screen, setScreen] = useState<'plans' | 'history' | 'dashboard' | 'evolution' | 'exercises'>('plans')
 
   const refresh = async () => {
     let loadedPlans = await listPlans()
@@ -117,6 +118,7 @@ export default function App() {
   if (screen === 'history') return <History onBack={() => setScreen('plans')} />
   if (screen === 'dashboard') return <Dashboard onBack={() => setScreen('plans')} />
   if (screen === 'evolution') return <Suspense fallback={<main className="center"><p>Carregando evolução…</p></main>}><Evolution onBack={() => setScreen('plans')} /></Suspense>
+  if (screen === 'exercises') return <Suspense fallback={<main className="center"><p>Carregando exercícios…</p></main>}><ExerciseLibrary onBack={() => setScreen('plans')} /></Suspense>
 
   const setItems = (exercises: PlanExerciseInput[]) => setDraft({ ...draft, exercises })
   const dragEnd = (event: DragEndEvent) => {
@@ -140,6 +142,7 @@ export default function App() {
       <button className="ghost" onClick={() => setScreen('dashboard')}>Início</button>
       <button className="ghost" onClick={() => setScreen('history')}>Histórico</button>
       <button className="ghost" onClick={() => setScreen('evolution')}>Evolução</button>
+      <button className="ghost" onClick={() => setScreen('exercises')}>Exercícios</button>
       <nav>{plans.filter(plan => !plan.archived_at).map(plan => <button className={selected?.id === plan.id ? 'selected' : ''} key={plan.id} onClick={() => setDraft(plan)}>{plan.name}<span>{plan.exercises.length}</span></button>)}</nav>
       <button className="ghost" onClick={() => supabase!.auth.signOut()}>Sair</button>
     </aside>
