@@ -9,6 +9,7 @@ import { archiveWorkoutPlan, createExercise, duplicateWorkoutPlan, listExercises
 import { getActiveWorkout, startWorkout, type ActiveSession } from './features/workout/api'
 import { WorkoutRunner } from './features/workout/WorkoutRunner'
 import { shouldShowWorkout } from './lib/workout-navigation'
+import { workoutAction } from './lib/workout-start'
 import { History } from './features/history/History'
 import { Dashboard } from './features/dashboard/Dashboard'
 
@@ -18,31 +19,154 @@ const empty = (): WorkoutPlanInput => ({ name: 'Nova ficha', description: '', sc
 const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
 function Row({ item, exercises, onChange, onRemove }: { item: PlanExerciseInput; exercises: Exercise[]; onChange: (next: PlanExerciseInput) => void; onRemove: () => void }) {
-  const sortable = useSortable({ id: item.id }); const style = { transform: CSS.Transform.toString(sortable.transform), transition: sortable.transition }
+  const sortable = useSortable({ id: item.id })
+  const style = { transform: CSS.Transform.toString(sortable.transform), transition: sortable.transition }
   return <article ref={sortable.setNodeRef} style={style} className="exercise-row">
     <button className="drag" aria-label="Arrastar exercício" {...sortable.attributes} {...sortable.listeners}><GripVertical /></button>
-    <select value={item.exerciseId} onChange={e => onChange({ ...item, exerciseId: e.target.value })}>{exercises.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select>
-    <label>Séries<input type="number" min="1" value={item.sets} onChange={e => onChange({ ...item, sets: Number(e.target.value) })}/></label>
-    <label>Reps<input value={item.repetitions} onChange={e => onChange({ ...item, repetitions: e.target.value })}/></label>
-    <label>Carga kg<input type="number" min="0" step="0.5" value={item.plannedLoadKg ?? ''} onChange={e => onChange({ ...item, plannedLoadKg: e.target.value === '' ? null : Number(e.target.value) })}/></label>
-    <label>Descanso s<input type="number" min="0" value={item.restSeconds} onChange={e => onChange({ ...item, restSeconds: Number(e.target.value) })}/></label>
-    <input aria-label="Observações" placeholder="Observações" value={item.notes} onChange={e => onChange({ ...item, notes: e.target.value })}/>
+    <select value={item.exerciseId} onChange={event => onChange({ ...item, exerciseId: event.target.value })}>{exercises.map(exercise => <option key={exercise.id} value={exercise.id}>{exercise.name}</option>)}</select>
+    <label>Séries<input type="number" min="1" value={item.sets} onChange={event => onChange({ ...item, sets: Number(event.target.value) })} /></label>
+    <label>Reps<input value={item.repetitions} onChange={event => onChange({ ...item, repetitions: event.target.value })} /></label>
+    <label>Carga kg<input type="number" min="0" step="0.5" value={item.plannedLoadKg ?? ''} onChange={event => onChange({ ...item, plannedLoadKg: event.target.value === '' ? null : Number(event.target.value) })} /></label>
+    <label>Descanso s<input type="number" min="0" value={item.restSeconds} onChange={event => onChange({ ...item, restSeconds: Number(event.target.value) })} /></label>
+    <input aria-label="Observações" placeholder="Observações" value={item.notes} onChange={event => onChange({ ...item, notes: event.target.value })} />
     <button className="icon danger" onClick={onRemove} aria-label="Remover exercício"><Trash2 /></button>
   </article>
 }
 
 export default function App() {
-  const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [signedIn, setSignedIn] = useState(false); const [plans, setPlans] = useState<Plan[]>([]); const [library, setLibrary] = useState<Exercise[]>([]); const [draft, setDraft] = useState<WorkoutPlanInput>(empty()); const [notice, setNotice] = useState(''); const [busy, setBusy] = useState(false); const [active,setActive]=useState<ActiveSession|null>(null); const [runnerDismissed,setRunnerDismissed]=useState(false); const [screen,setScreen]=useState<'plans'|'history'|'dashboard'>('plans')
-  const refresh = async () => { let p = await listPlans(); if (!p.length) { await seedInitialPlans(); p = await listPlans() } const e = await listExercises(); setPlans(p.map((x: any) => ({ id: x.id, name: x.name, description: x.description, scheduledDays: x.scheduled_days, archived_at: x.archived_at, exercises: x.workout_plan_exercises.sort((a: any,b: any) => a.position-b.position).map((i: any) => ({ id:i.id, exerciseId:i.exercise_id, position:i.position, sets:i.sets, repetitions:i.repetitions, plannedLoadKg:i.planned_load_kg, restSeconds:i.rest_seconds, notes:i.notes })) }))); setLibrary(e); setActive(await getActiveWorkout()) }
-  useEffect(() => { const client = supabase; if (!client) return; client.auth.getSession().then(({ data }) => { setSignedIn(Boolean(data.session)); if (data.session) refresh() }); const { data } = client.auth.onAuthStateChange((_event, session) => { setSignedIn(Boolean(session)); if (session) refresh() }); return () => data.subscription.unsubscribe() }, [])
-  const selected = useMemo(() => plans.find(p => p.id === draft.id), [plans, draft.id])
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [signedIn, setSignedIn] = useState(false)
+  const [plans, setPlans] = useState<Plan[]>([])
+  const [library, setLibrary] = useState<Exercise[]>([])
+  const [draft, setDraft] = useState<WorkoutPlanInput>(empty())
+  const [notice, setNotice] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [starting, setStarting] = useState(false)
+  const [active, setActive] = useState<ActiveSession | null>(null)
+  const [runnerDismissed, setRunnerDismissed] = useState(false)
+  const [screen, setScreen] = useState<'plans' | 'history' | 'dashboard'>('plans')
+
+  const refresh = async () => {
+    let loadedPlans = await listPlans()
+    if (!loadedPlans.length) {
+      await seedInitialPlans()
+      loadedPlans = await listPlans()
+    }
+    const exercises = await listExercises()
+    setPlans(loadedPlans.map((plan: any) => ({
+      id: plan.id,
+      name: plan.name,
+      description: plan.description,
+      scheduledDays: plan.scheduled_days,
+      archived_at: plan.archived_at,
+      exercises: plan.workout_plan_exercises.sort((a: any, b: any) => a.position - b.position).map((item: any) => ({
+        id: item.id,
+        exerciseId: item.exercise_id,
+        position: item.position,
+        sets: item.sets,
+        repetitions: item.repetitions,
+        plannedLoadKg: item.planned_load_kg,
+        restSeconds: item.rest_seconds,
+        notes: item.notes,
+      })),
+    })))
+    setLibrary(exercises)
+    setActive(await getActiveWorkout())
+  }
+
+  useEffect(() => {
+    const client = supabase
+    if (!client) return
+    client.auth.getSession().then(({ data }) => {
+      setSignedIn(Boolean(data.session))
+      if (data.session) void refresh()
+    })
+    const { data } = client.auth.onAuthStateChange((_event, session) => {
+      setSignedIn(Boolean(session))
+      if (session) void refresh()
+    })
+    return () => data.subscription.unsubscribe()
+  }, [])
+
+  const selected = useMemo(() => plans.find(plan => plan.id === draft.id), [plans, draft.id])
+  const action = workoutAction(Boolean(active), starting)
+
+  const openWorkout = async () => {
+    if (active) {
+      setRunnerDismissed(false)
+      return
+    }
+    setStarting(true)
+    try {
+      const started = await startWorkout(draft as Plan, new Map(library.map(exercise => [exercise.id, exercise.name])))
+      setActive(started)
+      setRunnerDismissed(false)
+    } catch (error: any) {
+      setNotice(error.message)
+    } finally {
+      setStarting(false)
+    }
+  }
+
   if (!supabase) return <main className="center"><h1>PSTL</h1><p>Configure o Supabase em <code>.env.local</code> para iniciar.</p></main>
-  if (!signedIn) return <main className="center"><h1>PSTL</h1><p>Acesso familiar protegido</p><form onSubmit={async e => { e.preventDefault(); setBusy(true); const { error } = await supabase!.auth.signInWithPassword({ email, password }); setBusy(false); setNotice(error?.message ?? '') }}><input placeholder="E-mail" type="email" value={email} onChange={e=>setEmail(e.target.value)} required/><input placeholder="Senha" type="password" value={password} onChange={e=>setPassword(e.target.value)} required/><button disabled={busy}>Entrar</button></form><small>{notice}</small></main>
-  if(shouldShowWorkout(Boolean(active),runnerDismissed)) return <WorkoutRunner session={active!} onClose={()=>setRunnerDismissed(true)} onFinished={()=>{setActive(null);setRunnerDismissed(true);refresh()}} onCancelled={()=>{setActive(null);setRunnerDismissed(true);refresh()}}/>
-  if(screen==='history') return <History onBack={()=>setScreen('plans')}/>
-  if(screen==='dashboard') return <Dashboard onBack={()=>setScreen('plans')}/>
+  if (!signedIn) return <main className="center"><h1>PSTL</h1><p>Acesso familiar protegido</p><form onSubmit={async event => { event.preventDefault(); setBusy(true); const { error } = await supabase!.auth.signInWithPassword({ email, password }); setBusy(false); setNotice(error?.message ?? '') }}><input placeholder="E-mail" type="email" value={email} onChange={event => setEmail(event.target.value)} required /><input placeholder="Senha" type="password" value={password} onChange={event => setPassword(event.target.value)} required /><button disabled={busy}>Entrar</button></form><small>{notice}</small></main>
+  if (shouldShowWorkout(Boolean(active), runnerDismissed)) return <WorkoutRunner session={active!} onClose={() => setRunnerDismissed(true)} onFinished={() => { setActive(null); setRunnerDismissed(true); void refresh() }} onCancelled={() => { setActive(null); setRunnerDismissed(true); void refresh() }} />
+  if (screen === 'history') return <History onBack={() => setScreen('plans')} />
+  if (screen === 'dashboard') return <Dashboard onBack={() => setScreen('plans')} />
+
   const setItems = (exercises: PlanExerciseInput[]) => setDraft({ ...draft, exercises })
-  const dragEnd = (event: DragEndEvent) => { if (event.over && event.active.id !== event.over.id) { const oldIndex = draft.exercises.findIndex(x=>x.id===event.active.id); const newIndex = draft.exercises.findIndex(x=>x.id===event.over?.id); setItems(arrayMove(draft.exercises, oldIndex, newIndex)) } }
-  const add = () => { const choice = library[0]; if (!choice) return setNotice('Crie primeiro um exercício na biblioteca.'); setItems([...draft.exercises, { id: crypto.randomUUID(), exerciseId: choice.id, position: draft.exercises.length, sets:4, repetitions:'10–12', plannedLoadKg:null, restSeconds:90, notes:'' }]) }
-  return <main className="app"><aside><h1>PSTL</h1><button onClick={() => { setDraft(empty()); setNotice('') }}><Plus/> Nova ficha</button>{active&&<button className="ghost" onClick={()=>setRunnerDismissed(false)}>Retomar treino</button>}<button className="ghost" onClick={()=>setScreen('dashboard')}>Início</button><button className="ghost" onClick={()=>setScreen('history')}>Histórico</button><nav>{plans.filter(p=>!p.archived_at).map(p=><button className={selected?.id===p.id?'selected':''} key={p.id} onClick={()=>setDraft(p)}>{p.name}<span>{p.exercises.length}</span></button>)}</nav><button className="ghost" onClick={()=>supabase!.auth.signOut()}>Sair</button></aside><section className="editor"><header><div><p className="eyebrow">MINHA FICHA</p><input className="title" value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})}/><textarea placeholder="Descrição do treino" value={draft.description} onChange={e=>setDraft({...draft,description:e.target.value})}/></div><div className="actions">{draft.id&&draft.exercises.length>0&&<button onClick={async()=>{try{const id=await startWorkout(draft as Plan,new Map(library.map(x=>[x.id,x.name])));const next=await getActiveWorkout();if(next){setActive(next);setRunnerDismissed(false)}else setNotice(`Treino ${id} iniciado.`)}catch(error:any){setNotice(error.message)}}}>Começar treino</button>}<button onClick={async()=>{setBusy(true); try { const saved=await saveWorkoutPlan(draft); setDraft({...draft,id:saved.id}); await refresh(); setNotice('Alterações salvas no Supabase.')} catch(e:any){setNotice(e.message)} finally{setBusy(false)}}} disabled={busy}><Save/>Salvar alterações</button>{draft.id&&<><button className="icon" aria-label="Duplicar ficha" onClick={async()=>{await duplicateWorkoutPlan(draft);await refresh();setNotice('Ficha duplicada.')}}><Copy/></button><button className="icon" aria-label="Arquivar ficha" onClick={async()=>{await archiveWorkoutPlan(draft.id!,true);await refresh();setNotice('Ficha duplicada.')}}><Archive/></button><button className="icon danger" aria-label="Excluir ficha" onClick={async()=>{if(confirm('Excluir esta ficha? O histórico de sessões será preservado.')){await softDeleteWorkoutPlan(draft.id!);await refresh();setDraft(empty())}}}><Trash2/></button></>}</div></header><p className="notice" role="status">{notice}</p><div className="days">{days.map((day,index)=><button className={draft.scheduledDays.includes(index)?'on':''} key={day} onClick={()=>setDraft({...draft,scheduledDays:draft.scheduledDays.includes(index)?draft.scheduledDays.filter(x=>x!==index):[...draft.scheduledDays,index]})}>{day}</button>)}</div><div className="library"><button onClick={add}><Plus/>Adicionar exercício</button><button className="ghost" onClick={async()=>{const name=prompt('Nome do exercício personalizado');if(name){const muscle=prompt('Grupo muscular')??'';await createExercise(name,muscle);await refresh();setNotice('Exercício adicionado à sua biblioteca.')}}}>Criar exercício personalizado</button></div><DndContext collisionDetection={closestCenter} onDragEnd={dragEnd}><SortableContext items={draft.exercises.map(x=>x.id)} strategy={verticalListSortingStrategy}>{draft.exercises.map(item=><Row key={item.id} item={item} exercises={library} onChange={next=>setItems(draft.exercises.map(x=>x.id===item.id?next:x))} onRemove={()=>setItems(draft.exercises.filter(x=>x.id!==item.id))}/>)}</SortableContext></DndContext></section></main>
+  const dragEnd = (event: DragEndEvent) => {
+    if (event.over && event.active.id !== event.over.id) {
+      const oldIndex = draft.exercises.findIndex(item => item.id === event.active.id)
+      const newIndex = draft.exercises.findIndex(item => item.id === event.over?.id)
+      setItems(arrayMove(draft.exercises, oldIndex, newIndex))
+    }
+  }
+  const add = () => {
+    const choice = library[0]
+    if (!choice) return setNotice('Crie primeiro um exercício na biblioteca.')
+    setItems([...draft.exercises, { id: crypto.randomUUID(), exerciseId: choice.id, position: draft.exercises.length, sets: 4, repetitions: '10–12', plannedLoadKg: null, restSeconds: 90, notes: '' }])
+  }
+
+  return <main className="app">
+    <aside>
+      <h1>PSTL</h1>
+      <button onClick={() => { setDraft(empty()); setNotice('') }}><Plus /> Nova ficha</button>
+      {active && <button className="ghost" onClick={() => setRunnerDismissed(false)}>Treino iniciado</button>}
+      <button className="ghost" onClick={() => setScreen('dashboard')}>Início</button>
+      <button className="ghost" onClick={() => setScreen('history')}>Histórico</button>
+      <nav>{plans.filter(plan => !plan.archived_at).map(plan => <button className={selected?.id === plan.id ? 'selected' : ''} key={plan.id} onClick={() => setDraft(plan)}>{plan.name}<span>{plan.exercises.length}</span></button>)}</nav>
+      <button className="ghost" onClick={() => supabase!.auth.signOut()}>Sair</button>
+    </aside>
+    <section className="editor">
+      <header>
+        <div>
+          <p className="eyebrow">MINHA FICHA</p>
+          <input className="title" value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} />
+          <textarea placeholder="Descrição do treino" value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} />
+        </div>
+        <div className="actions">
+          {draft.id && draft.exercises.length > 0 && <button disabled={action === 'starting'} onClick={openWorkout}>{action === 'resume' ? 'Treino iniciado' : action === 'starting' ? 'Iniciando treino…' : 'Começar treino'}</button>}
+          <button onClick={async () => { setBusy(true); try { const saved = await saveWorkoutPlan(draft); setDraft({ ...draft, id: saved.id }); await refresh(); setNotice('Alterações salvas no Supabase.') } catch (error: any) { setNotice(error.message) } finally { setBusy(false) } }} disabled={busy}><Save />Salvar alterações</button>
+          {draft.id && <>
+            <button className="icon" aria-label="Duplicar ficha" onClick={async () => { await duplicateWorkoutPlan(draft); await refresh(); setNotice('Ficha duplicada.') }}><Copy /></button>
+            <button className="icon" aria-label="Arquivar ficha" onClick={async () => { await archiveWorkoutPlan(draft.id!, true); await refresh(); setNotice('Ficha duplicada.') }}><Archive /></button>
+            <button className="icon danger" aria-label="Excluir ficha" onClick={async () => { if (confirm('Excluir esta ficha? O histórico de sessões será preservado.')) { await softDeleteWorkoutPlan(draft.id!); await refresh(); setDraft(empty()) } }}><Trash2 /></button>
+          </>}
+        </div>
+      </header>
+      <p className="notice" role="status">{notice}</p>
+      <div className="days">{days.map((day, index) => <button className={draft.scheduledDays.includes(index) ? 'on' : ''} key={day} onClick={() => setDraft({ ...draft, scheduledDays: draft.scheduledDays.includes(index) ? draft.scheduledDays.filter(item => item !== index) : [...draft.scheduledDays, index] })}>{day}</button>)}</div>
+      <div className="library">
+        <button onClick={add}><Plus />Adicionar exercício</button>
+        <button className="ghost" onClick={async () => { const name = prompt('Nome do exercício personalizado'); if (name) { const muscle = prompt('Grupo muscular') ?? ''; await createExercise(name, muscle); await refresh(); setNotice('Exercício adicionado à sua biblioteca.') } }}>Criar exercício personalizado</button>
+      </div>
+      <DndContext collisionDetection={closestCenter} onDragEnd={dragEnd}>
+        <SortableContext items={draft.exercises.map(item => item.id)} strategy={verticalListSortingStrategy}>
+          {draft.exercises.map(item => <Row key={item.id} item={item} exercises={library} onChange={next => setItems(draft.exercises.map(current => current.id === item.id ? next : current))} onRemove={() => setItems(draft.exercises.filter(current => current.id !== item.id))} />)}
+        </SortableContext>
+      </DndContext>
+    </section>
+  </main>
 }

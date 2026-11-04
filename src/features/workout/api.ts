@@ -3,15 +3,15 @@ import type { PlanExerciseInput } from '../../lib/plan'
 
 const db = () => { if (!supabase) throw new Error('Supabase não configurado.'); return supabase }
 export type ActiveSession = { id:string; status:string; started_at:string; workout_session_exercises: Array<{id:string;exercise_name:string;position:number;planned_sets:number;planned_repetitions:string;rest_seconds:number;workout_sets:Array<{id?:string;set_number:number;load_kg:number|null;repetitions:number;completed_at:string|null}>}> }
-export async function startWorkout(plan: { id:string; name:string; exercises:PlanExerciseInput[] }, names: Map<string,string>) {
+export async function startWorkout(plan: { id:string; name:string; exercises:PlanExerciseInput[] }, names: Map<string,string>): Promise<ActiveSession> {
   const client=db(); const {data:{user}}=await client.auth.getUser(); if(!user) throw new Error('Sessão expirada.')
   const snapshot={name:plan.name,exercises:plan.exercises.map(item=>({...item,name:names.get(item.exerciseId)??'Exercício'}))}
   const {data:session,error}=await client.from('workout_sessions').insert({owner_id:user.id,source_plan_id:plan.id,plan_snapshot:snapshot}).select().single(); if(error) throw error
   const rows=plan.exercises.map((item,position)=>({session_id:session.id,exercise_id:item.exerciseId,exercise_name:names.get(item.exerciseId)??'Exercício',position,planned_sets:item.sets,planned_repetitions:item.repetitions,rest_seconds:item.restSeconds,notes:item.notes}))
   const {data:items,error:itemError}=await client.from('workout_session_exercises').insert(rows).select(); if(itemError) throw itemError
   const sets=items.flatMap(item=>Array.from({length:item.planned_sets},(_,index)=>({session_exercise_id:item.id,set_number:index+1,repetitions:0})))
-  const {error:setError}=await client.from('workout_sets').insert(sets); if(setError) throw setError
-  return session.id
+  const {data:createdSets,error:setError}=await client.from('workout_sets').insert(sets).select('id,session_exercise_id,set_number,load_kg,repetitions,completed_at'); if(setError) throw setError
+  return {id:session.id,status:session.status,started_at:session.started_at,workout_session_exercises:items.map(item=>({id:item.id,exercise_name:item.exercise_name,position:item.position,planned_sets:item.planned_sets,planned_repetitions:item.planned_repetitions,rest_seconds:item.rest_seconds,workout_sets:(createdSets??[]).filter(set=>set.session_exercise_id===item.id).map(set=>({id:set.id,set_number:set.set_number,load_kg:set.load_kg,repetitions:set.repetitions,completed_at:set.completed_at}))}))}
 }
 export async function getActiveWorkout(){ const client=db(); const {data:{user}}=await client.auth.getUser(); if(!user) return null; const {data,error}=await client.from('workout_sessions').select('id,status,started_at,workout_session_exercises(id,exercise_name,position,planned_sets,planned_repetitions,rest_seconds,workout_sets(id,set_number,load_kg,repetitions,completed_at))').eq('owner_id',user.id).eq('status','in_progress').order('started_at',{ascending:false}).limit(1).maybeSingle(); if(error) throw error; return data as ActiveSession|null }
 export async function saveSet(sessionExerciseId:string,setNumber:number,loadKg:number|null,repetitions:number){const {error}=await db().from('workout_sets').update({load_kg:loadKg,repetitions,completed_at:new Date().toISOString()}).eq('session_exercise_id',sessionExerciseId).eq('set_number',setNumber);if(error)throw error}
