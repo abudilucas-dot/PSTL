@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { DndContext, closestCenter, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -12,6 +12,8 @@ import { shouldShowWorkout } from './lib/workout-navigation'
 import { workoutAction } from './lib/workout-start'
 import { History } from './features/history/History'
 import { Dashboard } from './features/dashboard/Dashboard'
+
+const Evolution = lazy(() => import('./features/evolution/Evolution').then(module => ({ default: module.Evolution })))
 
 type Exercise = { id: string; name: string; muscle_group: string }
 type Plan = WorkoutPlanInput & { id: string; archived_at?: string | null }
@@ -45,7 +47,7 @@ export default function App() {
   const [starting, setStarting] = useState(false)
   const [active, setActive] = useState<ActiveSession | null>(null)
   const [runnerDismissed, setRunnerDismissed] = useState(false)
-  const [screen, setScreen] = useState<'plans' | 'history' | 'dashboard'>('plans')
+  const [screen, setScreen] = useState<'plans' | 'history' | 'dashboard' | 'evolution'>('plans')
 
   const refresh = async () => {
     let loadedPlans = await listPlans()
@@ -114,6 +116,7 @@ export default function App() {
   if (shouldShowWorkout(Boolean(active), runnerDismissed)) return <WorkoutRunner session={active!} onClose={() => setRunnerDismissed(true)} onFinished={() => { setActive(null); setRunnerDismissed(true); void refresh() }} onCancelled={() => { setActive(null); setRunnerDismissed(true); void refresh() }} />
   if (screen === 'history') return <History onBack={() => setScreen('plans')} />
   if (screen === 'dashboard') return <Dashboard onBack={() => setScreen('plans')} />
+  if (screen === 'evolution') return <Suspense fallback={<main className="center"><p>Carregando evolução…</p></main>}><Evolution onBack={() => setScreen('plans')} /></Suspense>
 
   const setItems = (exercises: PlanExerciseInput[]) => setDraft({ ...draft, exercises })
   const dragEnd = (event: DragEndEvent) => {
@@ -136,6 +139,7 @@ export default function App() {
       {active && <button className="ghost" onClick={() => setRunnerDismissed(false)}>Treino iniciado</button>}
       <button className="ghost" onClick={() => setScreen('dashboard')}>Início</button>
       <button className="ghost" onClick={() => setScreen('history')}>Histórico</button>
+      <button className="ghost" onClick={() => setScreen('evolution')}>Evolução</button>
       <nav>{plans.filter(plan => !plan.archived_at).map(plan => <button className={selected?.id === plan.id ? 'selected' : ''} key={plan.id} onClick={() => setDraft(plan)}>{plan.name}<span>{plan.exercises.length}</span></button>)}</nav>
       <button className="ghost" onClick={() => supabase!.auth.signOut()}>Sair</button>
     </aside>
