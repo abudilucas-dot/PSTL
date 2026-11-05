@@ -3,9 +3,10 @@ import { ArrowLeft, Download, KeyRound, LogOut, ShieldCheck, Smartphone, Upload,
 import { isSupportedProfileAvatar } from '../../lib/profile-avatar'
 import { defaultWorkoutPreferences, type WorkoutPreferences } from '../../lib/workout-preferences'
 import { pwaInstallStatus } from '../../lib/pwa'
+import { passwordChangeMode } from '../../lib/password-recovery'
 import { changeOwnPassword, downloadPersonalExport, exportOwnData, getOwnProfile, getOwnWorkoutPreferences, getProfileAvatarUrl, saveOwnWorkoutPreferences, signOutEverywhere, updateOwnProfile, uploadProfileAvatar } from './api'
 
-export function Profile({ onBack, onSignedOut, onPreferencesChanged }: { onBack: () => void; onSignedOut: () => void; onPreferencesChanged: (preferences: WorkoutPreferences) => void }) {
+export function Profile({ onBack, onSignedOut, onPreferencesChanged, recoveryMode, onPasswordChanged }: { onBack: () => void; onSignedOut: () => void; onPreferencesChanged: (preferences: WorkoutPreferences) => void; recoveryMode: boolean; onPasswordChanged: () => void }) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
@@ -49,7 +50,7 @@ export function Profile({ onBack, onSignedOut, onPreferencesChanged }: { onBack:
   }
   const savePassword = async (event: React.FormEvent) => {
     event.preventDefault(); setBusy(true); setNotice('')
-    try { await changeOwnPassword(currentPassword, newPassword); setCurrentPassword(''); setNewPassword(''); setNotice('Senha alterada.'); } catch (error: any) { setNotice(error.message) } finally { setBusy(false) }
+    try { await changeOwnPassword(currentPassword, newPassword, recoveryMode); setCurrentPassword(''); setNewPassword(''); onPasswordChanged(); setNotice('Senha alterada.'); } catch (error: any) { setNotice(error.message) } finally { setBusy(false) }
   }
   const endAllSessions = async () => {
     if (!confirm('Encerrar esta conta em todos os dispositivos?')) return
@@ -69,6 +70,7 @@ export function Profile({ onBack, onSignedOut, onPreferencesChanged }: { onBack:
     await installPrompt.prompt(); await installPrompt.userChoice; setInstallPrompt(null)
   }
   const installStatus = pwaInstallStatus({ isStandalone, canPrompt: Boolean(installPrompt), isIos: /iphone|ipad|ipod/i.test(navigator.userAgent) })
+  const passwordMode = passwordChangeMode(recoveryMode)
 
   return <main className="history-page profile-page">
     <header><button className="icon" onClick={onBack} aria-label="Voltar"><ArrowLeft /></button><div><p className="eyebrow">PERFIL E SEGURANÇA</p><h1>Sua conta</h1><p>As alterações valem apenas para você.</p></div></header>
@@ -78,7 +80,7 @@ export function Profile({ onBack, onSignedOut, onPreferencesChanged }: { onBack:
       <div><h2>Foto de perfil</h2><p>Use uma imagem de até 5 MB.</p><button disabled={busy} onClick={() => fileInput.current?.click()}><Upload />Trocar foto</button><input ref={fileInput} className="visually-hidden" type="file" accept="image/*" onChange={chooseAvatar} /></div>
     </section>
     <section className="profile-card"><div><h2>Dados da conta</h2><p>E-mail: <b>{email || '—'}</b></p></div><form onSubmit={saveProfile}><label>Nome exibido<input value={name} onChange={event => setName(event.target.value)} required maxLength={80} /></label><button disabled={busy}>Salvar perfil</button></form></section>
-    <section className="profile-card"><div><h2><KeyRound /> Alterar senha</h2><p>Confirme a senha atual e escolha uma nova com no mínimo 8 caracteres.</p></div><form onSubmit={savePassword}><label>Senha atual<input value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} type="password" required autoComplete="current-password" /></label><label>Nova senha<input value={newPassword} onChange={event => setNewPassword(event.target.value)} type="password" minLength={8} required autoComplete="new-password" /></label><button disabled={busy}>Salvar nova senha</button></form></section>
+    <section className="profile-card"><div><h2><KeyRound /> {passwordMode === 'new-only' ? 'Definir nova senha' : 'Alterar senha'}</h2><p>{passwordMode === 'new-only' ? 'O link de recuperação foi confirmado. Escolha uma nova senha com no mínimo 8 caracteres.' : 'Confirme a senha atual e escolha uma nova com no mínimo 8 caracteres.'}</p></div><form onSubmit={savePassword}>{passwordMode === 'current-and-new' && <label>Senha atual<input value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} type="password" required autoComplete="current-password" /></label>}<label>Nova senha<input value={newPassword} onChange={event => setNewPassword(event.target.value)} type="password" minLength={8} required autoComplete="new-password" /></label><button disabled={busy}>Salvar nova senha</button></form></section>
     <section className="profile-card"><div><h2>Preferências de treino</h2><p>O descanso padrão entra automaticamente ao adicionar exercícios novos. Os avisos são usados quando um descanso termina.</p></div><form onSubmit={savePreferences}><label>Descanso padrão (segundos)<input type="number" min="0" max="3600" value={preferences.defaultRestSeconds} onChange={event => setPreferences(current => ({ ...current, defaultRestSeconds: Number(event.target.value) }))} /></label><label className="toggle-label"><input type="checkbox" checked={preferences.soundEnabled} onChange={event => setPreferences(current => ({ ...current, soundEnabled: event.target.checked }))} />Som ao terminar descanso</label><label className="toggle-label"><input type="checkbox" checked={preferences.vibrationEnabled} onChange={event => setPreferences(current => ({ ...current, vibrationEnabled: event.target.checked }))} />Vibrar ao terminar descanso</label><button disabled={busy}>Salvar preferências</button></form></section>
     <section className="profile-card security-card"><div><h2><ShieldCheck /> Sessões</h2><p>Se perdeu um dispositivo, encerre o acesso da sua conta em todos os dispositivos.</p></div><button className="danger" disabled={busy} onClick={endAllSessions}><LogOut />Encerrar todas as sessões</button></section>
     <section className="profile-card"><div><h2><Download /> Seus dados</h2><p>Baixe um arquivo JSON com seus treinos, séries, medidas, registros de recuperação e metadados das fotos. As imagens não são incluídas no arquivo.</p></div><button disabled={busy} onClick={downloadData}><Download />Exportar dados</button></section>

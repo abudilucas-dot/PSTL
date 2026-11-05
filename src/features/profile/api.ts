@@ -50,12 +50,14 @@ export async function getProfileAvatarUrl(path: string) {
   return data.signedUrl
 }
 
-export async function changeOwnPassword(currentPassword: string, newPassword: string) {
+export async function changeOwnPassword(currentPassword: string, newPassword: string, recoveryMode = false) {
   const user = await currentUser()
   if (!user.email) throw new Error('Não foi possível confirmar o e-mail da conta.')
   if (newPassword.length < 8) throw new Error('A nova senha precisa ter pelo menos 8 caracteres.')
-  const { error: verificationError } = await client().auth.signInWithPassword({ email: user.email, password: currentPassword })
-  if (verificationError) throw new Error('A senha atual está incorreta.')
+  if (!recoveryMode) {
+    const { error: verificationError } = await client().auth.signInWithPassword({ email: user.email, password: currentPassword })
+    if (verificationError) throw new Error('A senha atual está incorreta.')
+  }
   const { error } = await client().auth.updateUser({ password: newPassword })
   if (error) throw error
 }

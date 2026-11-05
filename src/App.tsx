@@ -62,6 +62,7 @@ export default function App() {
   const [runnerDismissed, setRunnerDismissed] = useState(false)
   const [screen, setScreen] = useState<Screen>('plans')
   const [workoutPreferences, setWorkoutPreferences] = useState<WorkoutPreferences>(defaultWorkoutPreferences)
+  const [recoveryMode, setRecoveryMode] = useState(false)
 
   const refresh = async () => {
     let loadedPlans = await listPlans()
@@ -99,9 +100,11 @@ export default function App() {
       setSignedIn(Boolean(data.session))
       if (data.session) void refresh()
     })
-    const { data } = client.auth.onAuthStateChange((_event, session) => {
+    const { data } = client.auth.onAuthStateChange((event, session) => {
       setSignedIn(Boolean(session))
       if (session) void refresh()
+      if (event === 'PASSWORD_RECOVERY' && session) { setRecoveryMode(true); setScreen('profile') }
+      if (!session) setRecoveryMode(false)
     })
     return () => data.subscription.unsubscribe()
   }, [])
@@ -127,7 +130,7 @@ export default function App() {
   }
 
   if (!supabase) return <main className="center"><h1>PSTL</h1><p>Configure o Supabase em <code>.env.local</code> para iniciar.</p></main>
-  if (!signedIn) return <main className="center"><h1>PSTL</h1><p>Acesso familiar protegido</p><form onSubmit={async event => { event.preventDefault(); setBusy(true); const { error } = await supabase!.auth.signInWithPassword({ email, password }); setBusy(false); setNotice(error?.message ?? '') }}><input placeholder="E-mail" type="email" value={email} onChange={event => setEmail(event.target.value)} required /><input placeholder="Senha" type="password" value={password} onChange={event => setPassword(event.target.value)} required /><button disabled={busy}>Entrar</button></form><small>{notice}</small></main>
+  if (!signedIn) return <main className="center"><h1>PSTL</h1><p>Acesso familiar protegido</p><form onSubmit={async event => { event.preventDefault(); setBusy(true); const { error } = await supabase!.auth.signInWithPassword({ email, password }); setBusy(false); setNotice(error?.message ?? '') }}><input placeholder="E-mail" type="email" value={email} onChange={event => setEmail(event.target.value)} required /><input placeholder="Senha" type="password" value={password} onChange={event => setPassword(event.target.value)} required /><button disabled={busy}>Entrar</button><button type="button" className="ghost" disabled={busy} onClick={async () => { if (!email) return setNotice('Informe seu e-mail para receber o link de recuperação.'); setBusy(true); const { error } = await supabase!.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin }); setBusy(false); setNotice(error?.message ?? 'Se o e-mail estiver cadastrado, você receberá um link para redefinir a senha.') }}>Esqueci minha senha</button></form><small>{notice}</small></main>
   if (shouldShowWorkout(Boolean(active), runnerDismissed)) return <WorkoutRunner session={active!} preferences={workoutPreferences} onClose={() => setRunnerDismissed(true)} onFinished={() => { setActive(null); setRunnerDismissed(true); void refresh() }} onCancelled={() => { setActive(null); setRunnerDismissed(true); void refresh() }} />
   const mobileNav = <MobileNav screen={screen} onNavigate={destination => setScreen(destination)} />
   if (screen === 'history') return <><History onBack={() => setScreen('plans')} />{mobileNav}</>
@@ -136,7 +139,7 @@ export default function App() {
   if (screen === 'exercises') return <><Suspense fallback={<main className="center"><p>Carregando exercícios…</p></main>}><ExerciseLibrary onBack={() => setScreen('plans')} /></Suspense>{mobileNav}</>
   if (screen === 'family') return <><Suspense fallback={<main className="center"><p>Carregando família…</p></main>}><FamilyPanel onBack={() => setScreen('plans')} /></Suspense>{mobileNav}</>
   if (screen === 'recovery') return <><Suspense fallback={<main className="center"><p>Carregando recuperação…</p></main>}><Recovery onBack={() => setScreen('plans')} /></Suspense>{mobileNav}</>
-  if (screen === 'profile') return <><Suspense fallback={<main className="center"><p>Carregando perfil…</p></main>}><Profile onBack={() => setScreen('plans')} onSignedOut={() => { setSignedIn(false); setScreen('plans') }} onPreferencesChanged={setWorkoutPreferences} /></Suspense>{mobileNav}</>
+  if (screen === 'profile') return <><Suspense fallback={<main className="center"><p>Carregando perfil…</p></main>}><Profile onBack={() => setScreen('plans')} onSignedOut={() => { setSignedIn(false); setScreen('plans') }} onPreferencesChanged={setWorkoutPreferences} recoveryMode={recoveryMode} onPasswordChanged={() => setRecoveryMode(false)} /></Suspense>{mobileNav}</>
 
   const setItems = (exercises: PlanExerciseInput[]) => setDraft({ ...draft, exercises })
   const dragEnd = (event: DragEndEvent) => {
