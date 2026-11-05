@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { DndContext, closestCenter, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Archive, Copy, GripVertical, Plus, Save, Trash2 } from 'lucide-react'
+import { Archive, BarChart3, Copy, Dumbbell, GripVertical, Home, Plus, Save, Trash2, Users } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import type { PlanExerciseInput } from './lib/plan'
 import { archiveWorkoutPlan, createExercise, duplicateWorkoutPlan, listExercises, listPlans, saveWorkoutPlan, seedInitialPlans, softDeleteWorkoutPlan, type WorkoutPlanInput } from './features/plans/api'
@@ -12,6 +12,7 @@ import { shouldShowWorkout } from './lib/workout-navigation'
 import { workoutAction } from './lib/workout-start'
 import { History } from './features/history/History'
 import { Dashboard } from './features/dashboard/Dashboard'
+import { mobileNavigation, type MobileDestination } from './lib/mobile-navigation'
 
 const Evolution = lazy(() => import('./features/evolution/Evolution').then(module => ({ default: module.Evolution })))
 const ExerciseLibrary = lazy(() => import('./features/exercises/ExerciseLibrary').then(module => ({ default: module.ExerciseLibrary })))
@@ -20,6 +21,7 @@ const Recovery = lazy(() => import('./features/recovery/Recovery').then(module =
 
 type Exercise = { id: string; name: string; muscle_group: string }
 type Plan = WorkoutPlanInput & { id: string; archived_at?: string | null }
+type Screen = 'plans' | 'history' | 'dashboard' | 'evolution' | 'exercises' | 'family' | 'recovery'
 const empty = (): WorkoutPlanInput => ({ name: 'Nova ficha', description: '', scheduledDays: [], exercises: [] })
 const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
@@ -38,6 +40,11 @@ function Row({ item, exercises, onChange, onRemove }: { item: PlanExerciseInput;
   </article>
 }
 
+function MobileNav({ screen, onNavigate }: { screen: Screen; onNavigate: (destination: MobileDestination) => void }) {
+  const Icon = ({ destination }: { destination: MobileDestination }) => destination === 'dashboard' ? <Home /> : destination === 'plans' || destination === 'exercises' ? <Dumbbell /> : destination === 'evolution' ? <BarChart3 /> : <Users />
+  return <nav className="mobile-nav" aria-label="Navegação principal">{mobileNavigation.map(item => <button className={screen === item.id ? 'selected' : ''} key={item.id} onClick={() => onNavigate(item.id)}><Icon destination={item.id} /><span>{item.label}</span></button>)}</nav>
+}
+
 export default function App() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -50,7 +57,7 @@ export default function App() {
   const [starting, setStarting] = useState(false)
   const [active, setActive] = useState<ActiveSession | null>(null)
   const [runnerDismissed, setRunnerDismissed] = useState(false)
-  const [screen, setScreen] = useState<'plans' | 'history' | 'dashboard' | 'evolution' | 'exercises' | 'family' | 'recovery'>('plans')
+  const [screen, setScreen] = useState<Screen>('plans')
 
   const refresh = async () => {
     let loadedPlans = await listPlans()
@@ -117,12 +124,13 @@ export default function App() {
   if (!supabase) return <main className="center"><h1>PSTL</h1><p>Configure o Supabase em <code>.env.local</code> para iniciar.</p></main>
   if (!signedIn) return <main className="center"><h1>PSTL</h1><p>Acesso familiar protegido</p><form onSubmit={async event => { event.preventDefault(); setBusy(true); const { error } = await supabase!.auth.signInWithPassword({ email, password }); setBusy(false); setNotice(error?.message ?? '') }}><input placeholder="E-mail" type="email" value={email} onChange={event => setEmail(event.target.value)} required /><input placeholder="Senha" type="password" value={password} onChange={event => setPassword(event.target.value)} required /><button disabled={busy}>Entrar</button></form><small>{notice}</small></main>
   if (shouldShowWorkout(Boolean(active), runnerDismissed)) return <WorkoutRunner session={active!} onClose={() => setRunnerDismissed(true)} onFinished={() => { setActive(null); setRunnerDismissed(true); void refresh() }} onCancelled={() => { setActive(null); setRunnerDismissed(true); void refresh() }} />
-  if (screen === 'history') return <History onBack={() => setScreen('plans')} />
-  if (screen === 'dashboard') return <Dashboard onBack={() => setScreen('plans')} />
-  if (screen === 'evolution') return <Suspense fallback={<main className="center"><p>Carregando evolução…</p></main>}><Evolution onBack={() => setScreen('plans')} /></Suspense>
-  if (screen === 'exercises') return <Suspense fallback={<main className="center"><p>Carregando exercícios…</p></main>}><ExerciseLibrary onBack={() => setScreen('plans')} /></Suspense>
-  if (screen === 'family') return <Suspense fallback={<main className="center"><p>Carregando família…</p></main>}><FamilyPanel onBack={() => setScreen('plans')} /></Suspense>
-  if (screen === 'recovery') return <Suspense fallback={<main className="center"><p>Carregando recuperação…</p></main>}><Recovery onBack={() => setScreen('plans')} /></Suspense>
+  const mobileNav = <MobileNav screen={screen} onNavigate={destination => setScreen(destination)} />
+  if (screen === 'history') return <><History onBack={() => setScreen('plans')} />{mobileNav}</>
+  if (screen === 'dashboard') return <><Dashboard onBack={() => setScreen('plans')} />{mobileNav}</>
+  if (screen === 'evolution') return <><Suspense fallback={<main className="center"><p>Carregando evolução…</p></main>}><Evolution onBack={() => setScreen('plans')} /></Suspense>{mobileNav}</>
+  if (screen === 'exercises') return <><Suspense fallback={<main className="center"><p>Carregando exercícios…</p></main>}><ExerciseLibrary onBack={() => setScreen('plans')} /></Suspense>{mobileNav}</>
+  if (screen === 'family') return <><Suspense fallback={<main className="center"><p>Carregando família…</p></main>}><FamilyPanel onBack={() => setScreen('plans')} /></Suspense>{mobileNav}</>
+  if (screen === 'recovery') return <><Suspense fallback={<main className="center"><p>Carregando recuperação…</p></main>}><Recovery onBack={() => setScreen('plans')} /></Suspense>{mobileNav}</>
 
   const setItems = (exercises: PlanExerciseInput[]) => setDraft({ ...draft, exercises })
   const dragEnd = (event: DragEndEvent) => {
@@ -138,7 +146,7 @@ export default function App() {
     setItems([...draft.exercises, { id: crypto.randomUUID(), exerciseId: choice.id, position: draft.exercises.length, sets: 4, repetitions: '10–12', plannedLoadKg: null, restSeconds: 90, notes: '' }])
   }
 
-  return <main className="app">
+  return <><main className="app">
     <aside>
       <h1>PSTL</h1>
       <button onClick={() => { setDraft(empty()); setNotice('') }}><Plus /> Nova ficha</button>
@@ -181,5 +189,5 @@ export default function App() {
         </SortableContext>
       </DndContext>
     </section>
-  </main>
+  </main>{mobileNav}</>
 }
