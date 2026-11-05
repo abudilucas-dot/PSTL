@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, BarChart3, LineChart as LineChartIcon, Ruler } from 'lucide-react'
+import { ArrowLeft, BarChart3, ImagePlus, LineChart as LineChartIcon, Ruler, Share2, Trash2 } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { listWorkoutHistory } from '../workout/api'
 import { bodyWeightPoints, measurementSummary, weeklyTrainingPoints } from '../../lib/evolution'
 import { bmi, hasMeasurementValue } from '../../lib/measurements'
 import { supabase } from '../../lib/supabase'
 import { formatTrainingVolume, formatVolumeTooltip } from '../../lib/volume'
+import { isSupportedProgressPhoto } from '../../lib/progress-photo'
+import { deleteProgressPhoto, listOwnProgressPhotos, setProgressPhotoSharing, uploadProgressPhoto, type ProgressPhoto } from '../progress-photos/api'
 
 type Measurement = {
   id: string
@@ -39,11 +41,16 @@ export function Evolution({ onBack }: { onBack: () => void }) {
   const [otherValue, setOtherValue] = useState('')
   const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
+  const [photos, setPhotos] = useState<ProgressPhoto[]>([])
+  const [photoDate, setPhotoDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [photoCaption, setPhotoCaption] = useState('')
+  const [photoBusy, setPhotoBusy] = useState(false)
 
   const load = async () => {
     try {
-      const history = await listWorkoutHistory()
+      const [history, ownPhotos] = await Promise.all([listWorkoutHistory(), listOwnProgressPhotos()])
       setSessions(history)
+      setPhotos(ownPhotos)
       if (!supabase) return
       const { data, error } = await supabase.from('body_measurements').select('id, measured_at, weight_kg, height_cm, arm_cm, forearm_cm, chest_cm, waist_cm, hip_cm, thigh_cm, calf_cm, body_fat_percent, custom_measurements').order('created_at', { ascending: false })
       if (error) throw error
@@ -51,6 +58,25 @@ export function Evolution({ onBack }: { onBack: () => void }) {
     } catch (error: any) {
       setNotice(error.message)
     }
+  }
+
+  const addPhoto = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!isSupportedProgressPhoto(file.type, file.size)) { setNotice('Use uma imagem de até 10 MB.'); return }
+    setPhotoBusy(true); setNotice('')
+    try { const photo = await uploadProgressPhoto(file, { takenAt: photoDate, caption: photoCaption }); setPhotos(current => [photo, ...current]); setPhotoCaption(''); setNotice('Foto de progresso salva como privada.') } catch (error: any) { setNotice(error.message) } finally { setPhotoBusy(false); event.target.value = '' }
+  }
+
+  const changePhotoSharing = async (photo: ProgressPhoto) => {
+    setPhotoBusy(true); setNotice('')
+    try { const updated = await setProgressPhotoSharing(photo.id, !photo.shared_with_family); setPhotos(current => current.map(item => item.id === updated.id ? updated : item)); setNotice(updated.shared_with_family ? 'Foto compartilhada com a família.' : 'Foto mantida apenas para você.') } catch (error: any) { setNotice(error.message) } finally { setPhotoBusy(false) }
+  }
+
+  const removePhoto = async (photo: ProgressPhoto) => {
+    if (!confirm('Excluir esta foto de progresso?')) return
+    setPhotoBusy(true); setNotice('')
+    try { await deleteProgressPhoto(photo); setPhotos(current => current.filter(item => item.id !== photo.id)); setNotice('Foto excluída.') } catch (error: any) { setNotice(error.message) } finally { setPhotoBusy(false) }
   }
 
   useEffect(() => { void load() }, [])
@@ -107,6 +133,11 @@ export function Evolution({ onBack }: { onBack: () => void }) {
       {currentBmi && <p>IMC atual: {currentBmi} <small>Indicador informativo, não é diagnóstico.</small></p>}
       <p className="notice" role="status">{notice}</p>
       {measurements.length > 0 && <div className="measurement-history"><h3>Histórico corporal</h3>{measurements.map(measurement => <p className="measurement" key={measurement.id}>{new Date(`${measurement.measured_at}T12:00:00`).toLocaleDateString('pt-BR')} · {measurementSummary(measurement) || 'Sem valores preenchidos'}</p>)}</div>}
+    </section>
+    <section className="progress-photos">
+      <div><p className="eyebrow">PRIVADO POR PADRÃO</p><h2><ImagePlus /> Fotos de progresso</h2><p>Registre fotos para comparação pessoal. Elas só aparecem para a família se você decidir compartilhar cada uma.</p></div>
+      <div className="progress-photo-form"><label>Data da foto<input type="date" value={photoDate} max={new Date().toISOString().slice(0, 10)} onChange={event => setPhotoDate(event.target.value)} /></label><label>Legenda opcional<input maxLength={300} value={photoCaption} onChange={event => setPhotoCaption(event.target.value)} placeholder="Ex.: comparação mensal" /></label><label className="upload-photo-button"><ImagePlus />{photoBusy ? 'Enviando…' : 'Adicionar foto'}<input disabled={photoBusy} type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={addPhoto} /></label></div>
+      {!photos.length ? <p className="chart-empty">Nenhuma foto de progresso registrada.</p> : <div className="progress-photo-grid">{photos.map(photo => <figure key={photo.id}><img src={photo.url} alt={photo.caption || `Foto de progresso de ${new Date(`${photo.taken_at}T12:00:00`).toLocaleDateString('pt-BR')}`} /><figcaption><b>{new Date(`${photo.taken_at}T12:00:00`).toLocaleDateString('pt-BR')}</b>{photo.caption && <span>{photo.caption}</span>}<small>{photo.shared_with_family ? 'Compartilhada com a família' : 'Visível apenas para você'}</small><div><button disabled={photoBusy} onClick={() => changePhotoSharing(photo)}><Share2 />{photo.shared_with_family ? 'Tornar privada' : 'Compartilhar'}</button><button className="icon danger" disabled={photoBusy} aria-label="Excluir foto" onClick={() => removePhoto(photo)}><Trash2 /></button></div></figcaption></figure>)}</div>}
     </section>
   </main>
 }

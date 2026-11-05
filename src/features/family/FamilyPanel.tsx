@@ -3,11 +3,13 @@ import { ArrowLeft, CalendarDays, Dumbbell, Gauge, Users } from 'lucide-react'
 import { listFamilyProgress } from '../workout/api'
 import { familySummary, type FamilyProgress } from '../../lib/family'
 import { formatTrainingVolume } from '../../lib/volume'
+import { listSharedProgressPhotos, type ProgressPhoto } from '../progress-photos/api'
 
 export function FamilyPanel({ onBack }: { onBack: () => void }) {
   const [progress, setProgress] = useState<FamilyProgress[]>([])
   const [selectedId, setSelectedId] = useState('')
   const [error, setError] = useState('')
+  const [sharedPhotos, setSharedPhotos] = useState<ProgressPhoto[]>([])
 
   useEffect(() => {
     void listFamilyProgress()
@@ -20,6 +22,11 @@ export function FamilyPanel({ onBack }: { onBack: () => void }) {
   }, [])
 
   const selected = useMemo(() => progress.find(member => member.id === selectedId) ?? progress[0], [progress, selectedId])
+
+  useEffect(() => {
+    if (!selected?.id) return
+    void listSharedProgressPhotos(selected.id).then(setSharedPhotos).catch(reason => setError(reason.message))
+  }, [selected?.id])
 
   return <main className="history-page family-page">
     <header>
@@ -47,6 +54,7 @@ export function FamilyPanel({ onBack }: { onBack: () => void }) {
           <p><b>Maior carga registrada:</b> {selected.bestLoadKg === null ? 'Sem séries com carga registradas' : `${selected.bestLoadKg.toLocaleString('pt-BR')} kg`}</p>
         </div>
         <p className="family-privacy">Sem ranking de força e sem acesso a medidas corporais: o objetivo é apoiar a consistência, preservando a privacidade de cada pessoa.</p>
+        {sharedPhotos.length > 0 && <section className="shared-photos"><h3>Fotos compartilhadas</h3><div>{sharedPhotos.map(photo => <figure key={photo.id}><img src={photo.url} alt={photo.caption || `Foto de progresso de ${selected.name}`} /><figcaption>{new Date(`${photo.taken_at}T12:00:00`).toLocaleDateString('pt-BR')}{photo.caption ? ` · ${photo.caption}` : ''}</figcaption></figure>)}</div></section>}
       </section>}
     </>}
   </main>
