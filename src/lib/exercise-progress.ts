@@ -26,3 +26,11 @@ export function exerciseProgress(sessions: ExerciseSession[]) {
     maxSessionVolume: points.length ? Math.max(...points.map(point => point.volume)) : 0,
   }
 }
+
+export function lastExercisePerformance(sessions: ExerciseSession[]) {
+  const completedSets = sessions
+    .flatMap(session => session.sets.filter(set => set.completed_at).map(set => ({ ...set, completedAt: set.completed_at! })))
+    .sort((first, second) => new Date(first.completedAt).getTime() - new Date(second.completedAt).getTime())
+  const last = completedSets.at(-1)
+  return last ? { loadKg: last.load_kg, repetitions: last.repetitions, completedAt: last.completedAt } : null
+}
