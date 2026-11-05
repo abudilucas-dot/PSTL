@@ -13,6 +13,8 @@ import { workoutAction } from './lib/workout-start'
 import { History } from './features/history/History'
 import { Dashboard } from './features/dashboard/Dashboard'
 import { mobileNavigation, type MobileDestination } from './lib/mobile-navigation'
+import { defaultWorkoutPreferences, type WorkoutPreferences } from './lib/workout-preferences'
+import { getOwnWorkoutPreferences } from './features/profile/api'
 
 const Evolution = lazy(() => import('./features/evolution/Evolution').then(module => ({ default: module.Evolution })))
 const ExerciseLibrary = lazy(() => import('./features/exercises/ExerciseLibrary').then(module => ({ default: module.ExerciseLibrary })))
@@ -59,6 +61,7 @@ export default function App() {
   const [active, setActive] = useState<ActiveSession | null>(null)
   const [runnerDismissed, setRunnerDismissed] = useState(false)
   const [screen, setScreen] = useState<Screen>('plans')
+  const [workoutPreferences, setWorkoutPreferences] = useState<WorkoutPreferences>(defaultWorkoutPreferences)
 
   const refresh = async () => {
     let loadedPlans = await listPlans()
@@ -66,7 +69,7 @@ export default function App() {
       await seedInitialPlans()
       loadedPlans = await listPlans()
     }
-    const exercises = await listExercises()
+    const [exercises, preferences] = await Promise.all([listExercises(), getOwnWorkoutPreferences()])
     setPlans(loadedPlans.map((plan: any) => ({
       id: plan.id,
       name: plan.name,
@@ -85,6 +88,7 @@ export default function App() {
       })),
     })))
     setLibrary(exercises)
+    setWorkoutPreferences(preferences)
     setActive(await getActiveWorkout())
   }
 
@@ -124,7 +128,7 @@ export default function App() {
 
   if (!supabase) return <main className="center"><h1>PSTL</h1><p>Configure o Supabase em <code>.env.local</code> para iniciar.</p></main>
   if (!signedIn) return <main className="center"><h1>PSTL</h1><p>Acesso familiar protegido</p><form onSubmit={async event => { event.preventDefault(); setBusy(true); const { error } = await supabase!.auth.signInWithPassword({ email, password }); setBusy(false); setNotice(error?.message ?? '') }}><input placeholder="E-mail" type="email" value={email} onChange={event => setEmail(event.target.value)} required /><input placeholder="Senha" type="password" value={password} onChange={event => setPassword(event.target.value)} required /><button disabled={busy}>Entrar</button></form><small>{notice}</small></main>
-  if (shouldShowWorkout(Boolean(active), runnerDismissed)) return <WorkoutRunner session={active!} onClose={() => setRunnerDismissed(true)} onFinished={() => { setActive(null); setRunnerDismissed(true); void refresh() }} onCancelled={() => { setActive(null); setRunnerDismissed(true); void refresh() }} />
+  if (shouldShowWorkout(Boolean(active), runnerDismissed)) return <WorkoutRunner session={active!} preferences={workoutPreferences} onClose={() => setRunnerDismissed(true)} onFinished={() => { setActive(null); setRunnerDismissed(true); void refresh() }} onCancelled={() => { setActive(null); setRunnerDismissed(true); void refresh() }} />
   const mobileNav = <MobileNav screen={screen} onNavigate={destination => setScreen(destination)} />
   if (screen === 'history') return <><History onBack={() => setScreen('plans')} />{mobileNav}</>
   if (screen === 'dashboard') return <><Dashboard onBack={() => setScreen('plans')} onProfile={() => setScreen('profile')} />{mobileNav}</>
@@ -132,7 +136,7 @@ export default function App() {
   if (screen === 'exercises') return <><Suspense fallback={<main className="center"><p>Carregando exercícios…</p></main>}><ExerciseLibrary onBack={() => setScreen('plans')} /></Suspense>{mobileNav}</>
   if (screen === 'family') return <><Suspense fallback={<main className="center"><p>Carregando família…</p></main>}><FamilyPanel onBack={() => setScreen('plans')} /></Suspense>{mobileNav}</>
   if (screen === 'recovery') return <><Suspense fallback={<main className="center"><p>Carregando recuperação…</p></main>}><Recovery onBack={() => setScreen('plans')} /></Suspense>{mobileNav}</>
-  if (screen === 'profile') return <><Suspense fallback={<main className="center"><p>Carregando perfil…</p></main>}><Profile onBack={() => setScreen('plans')} onSignedOut={() => { setSignedIn(false); setScreen('plans') }} /></Suspense>{mobileNav}</>
+  if (screen === 'profile') return <><Suspense fallback={<main className="center"><p>Carregando perfil…</p></main>}><Profile onBack={() => setScreen('plans')} onSignedOut={() => { setSignedIn(false); setScreen('plans') }} onPreferencesChanged={setWorkoutPreferences} /></Suspense>{mobileNav}</>
 
   const setItems = (exercises: PlanExerciseInput[]) => setDraft({ ...draft, exercises })
   const dragEnd = (event: DragEndEvent) => {
@@ -145,7 +149,7 @@ export default function App() {
   const add = () => {
     const choice = library[0]
     if (!choice) return setNotice('Crie primeiro um exercício na biblioteca.')
-    setItems([...draft.exercises, { id: crypto.randomUUID(), exerciseId: choice.id, position: draft.exercises.length, sets: 4, repetitions: '10–12', plannedLoadKg: null, restSeconds: 90, notes: '' }])
+    setItems([...draft.exercises, { id: crypto.randomUUID(), exerciseId: choice.id, position: draft.exercises.length, sets: 4, repetitions: '10–12', plannedLoadKg: null, restSeconds: workoutPreferences.defaultRestSeconds, notes: '' }])
   }
 
   return <><main className="app">
