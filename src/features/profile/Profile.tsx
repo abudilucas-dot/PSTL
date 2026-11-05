@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Download, KeyRound, LogOut, ShieldCheck, Upload, UserRound } from 'lucide-react'
+import { ArrowLeft, Download, KeyRound, LogOut, ShieldCheck, Smartphone, Upload, UserRound } from 'lucide-react'
 import { isSupportedProfileAvatar } from '../../lib/profile-avatar'
 import { defaultWorkoutPreferences, type WorkoutPreferences } from '../../lib/workout-preferences'
+import { pwaInstallStatus } from '../../lib/pwa'
 import { changeOwnPassword, downloadPersonalExport, exportOwnData, getOwnProfile, getOwnWorkoutPreferences, getProfileAvatarUrl, saveOwnWorkoutPreferences, signOutEverywhere, updateOwnProfile, uploadProfileAvatar } from './api'
 
 export function Profile({ onBack, onSignedOut, onPreferencesChanged }: { onBack: () => void; onSignedOut: () => void; onPreferencesChanged: (preferences: WorkoutPreferences) => void }) {
@@ -13,6 +14,8 @@ export function Profile({ onBack, onSignedOut, onPreferencesChanged }: { onBack:
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
   const [preferences, setPreferences] = useState<WorkoutPreferences>(defaultWorkoutPreferences)
+  const [installPrompt, setInstallPrompt] = useState<(Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> }) | null>(null)
+  const [isStandalone, setIsStandalone] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
 
   const load = async () => {
@@ -26,6 +29,12 @@ export function Profile({ onBack, onSignedOut, onPreferencesChanged }: { onBack:
   }
 
   useEffect(() => { void load() }, [])
+  useEffect(() => {
+    const updateStandalone = () => setIsStandalone(window.matchMedia('(display-mode: standalone)').matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone))
+    const capturePrompt = (event: Event) => { event.preventDefault(); setInstallPrompt(event as Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> }) }
+    updateStandalone(); window.addEventListener('beforeinstallprompt', capturePrompt); window.addEventListener('appinstalled', updateStandalone)
+    return () => { window.removeEventListener('beforeinstallprompt', capturePrompt); window.removeEventListener('appinstalled', updateStandalone) }
+  }, [])
 
   const saveProfile = async (event: React.FormEvent) => {
     event.preventDefault(); setBusy(true); setNotice('')
@@ -55,6 +64,11 @@ export function Profile({ onBack, onSignedOut, onPreferencesChanged }: { onBack:
     event.preventDefault(); setBusy(true); setNotice('')
     try { const saved = await saveOwnWorkoutPreferences(preferences); onPreferencesChanged(saved); setNotice('Preferências de treino salvas.') } catch (error: any) { setNotice(error.message) } finally { setBusy(false) }
   }
+  const installApp = async () => {
+    if (!installPrompt) return
+    await installPrompt.prompt(); await installPrompt.userChoice; setInstallPrompt(null)
+  }
+  const installStatus = pwaInstallStatus({ isStandalone, canPrompt: Boolean(installPrompt), isIos: /iphone|ipad|ipod/i.test(navigator.userAgent) })
 
   return <main className="history-page profile-page">
     <header><button className="icon" onClick={onBack} aria-label="Voltar"><ArrowLeft /></button><div><p className="eyebrow">PERFIL E SEGURANÇA</p><h1>Sua conta</h1><p>As alterações valem apenas para você.</p></div></header>
@@ -68,6 +82,7 @@ export function Profile({ onBack, onSignedOut, onPreferencesChanged }: { onBack:
     <section className="profile-card"><div><h2>Preferências de treino</h2><p>O descanso padrão entra automaticamente ao adicionar exercícios novos. Os avisos são usados quando um descanso termina.</p></div><form onSubmit={savePreferences}><label>Descanso padrão (segundos)<input type="number" min="0" max="3600" value={preferences.defaultRestSeconds} onChange={event => setPreferences(current => ({ ...current, defaultRestSeconds: Number(event.target.value) }))} /></label><label className="toggle-label"><input type="checkbox" checked={preferences.soundEnabled} onChange={event => setPreferences(current => ({ ...current, soundEnabled: event.target.checked }))} />Som ao terminar descanso</label><label className="toggle-label"><input type="checkbox" checked={preferences.vibrationEnabled} onChange={event => setPreferences(current => ({ ...current, vibrationEnabled: event.target.checked }))} />Vibrar ao terminar descanso</label><button disabled={busy}>Salvar preferências</button></form></section>
     <section className="profile-card security-card"><div><h2><ShieldCheck /> Sessões</h2><p>Se perdeu um dispositivo, encerre o acesso da sua conta em todos os dispositivos.</p></div><button className="danger" disabled={busy} onClick={endAllSessions}><LogOut />Encerrar todas as sessões</button></section>
     <section className="profile-card"><div><h2><Download /> Seus dados</h2><p>Baixe um arquivo JSON com seus treinos, séries, medidas, registros de recuperação e metadados das fotos. As imagens não são incluídas no arquivo.</p></div><button disabled={busy} onClick={downloadData}><Download />Exportar dados</button></section>
+    <section className="profile-card"><div><h2><Smartphone /> Aplicativo no celular</h2>{installStatus === 'installed' ? <p>O PSTL já está instalado neste dispositivo.</p> : installStatus === 'ios' ? <p>No Safari, toque em Compartilhar e depois em “Adicionar à Tela de Início”.</p> : installStatus === 'unavailable' ? <p>Abra pelo navegador do celular ou aguarde a opção de instalação ficar disponível.</p> : <p>Instale o PSTL para abrir como aplicativo, com tela cheia e acesso mais rápido.</p>}</div>{installStatus === 'ready' && <button onClick={installApp}><Smartphone />Instalar aplicativo</button>}</section>
     <p className="profile-note">A remoção de senha só é possível depois de configurar outro método de acesso seguro. Por isso ela não é simulada aqui.</p>
   </main>
 }
