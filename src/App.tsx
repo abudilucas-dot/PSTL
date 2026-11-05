@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { DndContext, closestCenter, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Archive, BarChart3, Copy, Dumbbell, GripVertical, Home, Plus, Save, Trash2, Users } from 'lucide-react'
+import { Archive, BarChart3, Copy, Dumbbell, GripVertical, Home, Plus, Save, Settings, Trash2, Users } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import type { PlanExerciseInput } from './lib/plan'
 import { archiveWorkoutPlan, createExercise, duplicateWorkoutPlan, listExercises, listPlans, saveWorkoutPlan, seedInitialPlans, softDeleteWorkoutPlan, type WorkoutPlanInput } from './features/plans/api'
@@ -18,10 +18,11 @@ const Evolution = lazy(() => import('./features/evolution/Evolution').then(modul
 const ExerciseLibrary = lazy(() => import('./features/exercises/ExerciseLibrary').then(module => ({ default: module.ExerciseLibrary })))
 const FamilyPanel = lazy(() => import('./features/family/FamilyPanel').then(module => ({ default: module.FamilyPanel })))
 const Recovery = lazy(() => import('./features/recovery/Recovery').then(module => ({ default: module.Recovery })))
+const Profile = lazy(() => import('./features/profile/Profile').then(module => ({ default: module.Profile })))
 
 type Exercise = { id: string; name: string; muscle_group: string }
 type Plan = WorkoutPlanInput & { id: string; archived_at?: string | null }
-type Screen = 'plans' | 'history' | 'dashboard' | 'evolution' | 'exercises' | 'family' | 'recovery'
+type Screen = 'plans' | 'history' | 'dashboard' | 'evolution' | 'exercises' | 'family' | 'recovery' | 'profile'
 const empty = (): WorkoutPlanInput => ({ name: 'Nova ficha', description: '', scheduledDays: [], exercises: [] })
 const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
@@ -126,11 +127,12 @@ export default function App() {
   if (shouldShowWorkout(Boolean(active), runnerDismissed)) return <WorkoutRunner session={active!} onClose={() => setRunnerDismissed(true)} onFinished={() => { setActive(null); setRunnerDismissed(true); void refresh() }} onCancelled={() => { setActive(null); setRunnerDismissed(true); void refresh() }} />
   const mobileNav = <MobileNav screen={screen} onNavigate={destination => setScreen(destination)} />
   if (screen === 'history') return <><History onBack={() => setScreen('plans')} />{mobileNav}</>
-  if (screen === 'dashboard') return <><Dashboard onBack={() => setScreen('plans')} />{mobileNav}</>
+  if (screen === 'dashboard') return <><Dashboard onBack={() => setScreen('plans')} onProfile={() => setScreen('profile')} />{mobileNav}</>
   if (screen === 'evolution') return <><Suspense fallback={<main className="center"><p>Carregando evolução…</p></main>}><Evolution onBack={() => setScreen('plans')} /></Suspense>{mobileNav}</>
   if (screen === 'exercises') return <><Suspense fallback={<main className="center"><p>Carregando exercícios…</p></main>}><ExerciseLibrary onBack={() => setScreen('plans')} /></Suspense>{mobileNav}</>
   if (screen === 'family') return <><Suspense fallback={<main className="center"><p>Carregando família…</p></main>}><FamilyPanel onBack={() => setScreen('plans')} /></Suspense>{mobileNav}</>
   if (screen === 'recovery') return <><Suspense fallback={<main className="center"><p>Carregando recuperação…</p></main>}><Recovery onBack={() => setScreen('plans')} /></Suspense>{mobileNav}</>
+  if (screen === 'profile') return <><Suspense fallback={<main className="center"><p>Carregando perfil…</p></main>}><Profile onBack={() => setScreen('plans')} onSignedOut={() => { setSignedIn(false); setScreen('plans') }} /></Suspense>{mobileNav}</>
 
   const setItems = (exercises: PlanExerciseInput[]) => setDraft({ ...draft, exercises })
   const dragEnd = (event: DragEndEvent) => {
@@ -157,6 +159,7 @@ export default function App() {
       <button className="ghost" onClick={() => setScreen('exercises')}>Exercícios</button>
       <button className="ghost" onClick={() => setScreen('family')}>Família</button>
       <button className="ghost" onClick={() => setScreen('recovery')}>Recuperação</button>
+      <button className="ghost" onClick={() => setScreen('profile')}><Settings />Perfil</button>
       <nav>{plans.filter(plan => !plan.archived_at).map(plan => <button className={selected?.id === plan.id ? 'selected' : ''} key={plan.id} onClick={() => setDraft(plan)}>{plan.name}<span>{plan.exercises.length}</span></button>)}</nav>
       <button className="ghost" onClick={() => supabase!.auth.signOut()}>Sair</button>
     </aside>
