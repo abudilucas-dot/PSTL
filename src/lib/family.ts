@@ -1,4 +1,4 @@
-export type FamilyMember = { id: string; display_name: string }
+export type FamilyMember = { id: string; display_name: string; avatar_path?: string | null }
 
 type WorkoutSet = { completed_at: string | null; load_kg: number | null; repetitions: number }
 export type FamilySession = {
@@ -12,6 +12,7 @@ export type FamilySession = {
 export type FamilyProgress = {
   id: string
   name: string
+  avatarPath: string | null
   completedWorkouts: number
   weekWorkouts: number
   volume: number
@@ -33,6 +34,7 @@ export function familySummary(members: FamilyMember[], sessions: FamilySession[]
     return {
       id: member.id,
       name: member.display_name,
+      avatarPath: member.avatar_path ?? null,
       completedWorkouts: completed.length,
       weekWorkouts: completed.filter(session => isInLastSevenDays(session.started_at, now)).length,
       volume: sets.reduce((total, set) => total + (set.load_kg ?? 0) * set.repetitions, 0),

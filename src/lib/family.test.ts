@@ -3,7 +3,7 @@ import { familySummary } from './family'
 
 it('keeps each family member progress separate while summarizing completed workouts', () => {
   const members = [
-    { id: 'lucas', display_name: 'Lucas' },
+    { id: 'lucas', display_name: 'Lucas', avatar_path: 'lucas/avatar.webp' },
     { id: 'tiago', display_name: 'Tiago' },
   ]
   const sessions = [
@@ -22,7 +22,7 @@ it('keeps each family member progress separate while summarizing completed worko
   ]
 
   expect(familySummary(members, sessions, new Date('2026-11-04T12:00:00Z'))).toEqual([
-    { id: 'lucas', name: 'Lucas', completedWorkouts: 1, weekWorkouts: 1, volume: 200, bestLoadKg: 20, lastWorkoutName: 'Treino A', lastWorkoutAt: '2026-11-03T10:00:00Z' },
-    { id: 'tiago', name: 'Tiago', completedWorkouts: 1, weekWorkouts: 0, volume: 240, bestLoadKg: 30, lastWorkoutName: 'Treino C', lastWorkoutAt: '2026-10-20T10:00:00Z' },
+    { id: 'lucas', name: 'Lucas', avatarPath: 'lucas/avatar.webp', completedWorkouts: 1, weekWorkouts: 1, volume: 200, bestLoadKg: 20, lastWorkoutName: 'Treino A', lastWorkoutAt: '2026-11-03T10:00:00Z' },
+    { id: 'tiago', name: 'Tiago', avatarPath: null, completedWorkouts: 1, weekWorkouts: 0, volume: 240, bestLoadKg: 30, lastWorkoutName: 'Treino C', lastWorkoutAt: '2026-10-20T10:00:00Z' },
   ])
 })

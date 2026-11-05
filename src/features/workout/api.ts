@@ -35,7 +35,7 @@ export async function listFamilyProgress(): Promise<{ members: FamilyMember[]; s
   if (viewerError) throw viewerError
   if (!viewer.family_group_id) return { members: [], sessions: [] }
   const [{ data: members, error: memberError }, { data: sessions, error: sessionError }] = await Promise.all([
-    client.from('profiles').select('id,display_name').eq('family_group_id', viewer.family_group_id).order('display_name'),
+    client.from('profiles').select('id,display_name,avatar_path').eq('family_group_id', viewer.family_group_id).order('display_name'),
     client.from('workout_sessions').select('owner_id,status,started_at,plan_snapshot,workout_session_exercises(workout_sets(completed_at,load_kg,repetitions))').in('status', ['completed', 'cancelled']).order('started_at', { ascending: false }),
   ])
   if (memberError) throw memberError

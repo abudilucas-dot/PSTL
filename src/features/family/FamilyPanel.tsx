@@ -4,12 +4,14 @@ import { listFamilyProgress } from '../workout/api'
 import { familySummary, type FamilyProgress } from '../../lib/family'
 import { formatTrainingVolume } from '../../lib/volume'
 import { listSharedProgressPhotos, type ProgressPhoto } from '../progress-photos/api'
+import { getProfileAvatarUrl } from '../profile/api'
 
 export function FamilyPanel({ onBack }: { onBack: () => void }) {
   const [progress, setProgress] = useState<FamilyProgress[]>([])
   const [selectedId, setSelectedId] = useState('')
   const [error, setError] = useState('')
   const [sharedPhotos, setSharedPhotos] = useState<ProgressPhoto[]>([])
+  const [avatarUrls, setAvatarUrls] = useState<Record<string, string>>({})
 
   useEffect(() => {
     void listFamilyProgress()
@@ -28,6 +30,12 @@ export function FamilyPanel({ onBack }: { onBack: () => void }) {
     void listSharedProgressPhotos(selected.id).then(setSharedPhotos).catch(reason => setError(reason.message))
   }, [selected?.id])
 
+  useEffect(() => {
+    void Promise.all(progress.filter(member => member.avatarPath).map(async member => [member.id, await getProfileAvatarUrl(member.avatarPath!)] as const))
+      .then(entries => setAvatarUrls(Object.fromEntries(entries)))
+      .catch(reason => setError(reason.message))
+  }, [progress])
+
   return <main className="history-page family-page">
     <header>
       <button className="icon" onClick={onBack} aria-label="Voltar às fichas"><ArrowLeft /></button>
@@ -38,7 +46,7 @@ export function FamilyPanel({ onBack }: { onBack: () => void }) {
     {!progress.length && !error ? <div className="empty"><Users /><h2>Nenhum perfil da família disponível</h2><p>Entre novamente depois que os perfis forem vinculados.</p></div> : <>
       <section className="family-cards" aria-label="Membros da família">
         {progress.map(member => <button className={member.id === selected?.id ? 'family-card selected' : 'family-card'} key={member.id} onClick={() => setSelectedId(member.id)}>
-          <span className="family-avatar">{member.name.slice(0, 1).toUpperCase()}</span>
+          <span className="family-avatar">{avatarUrls[member.id] ? <img src={avatarUrls[member.id]} alt="" /> : member.name.slice(0, 1).toUpperCase()}</span>
           <span><b>{member.name}</b><small>{member.weekWorkouts} treino{member.weekWorkouts === 1 ? '' : 's'} nos últimos 7 dias</small></span>
         </button>)}
       </section>
