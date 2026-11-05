@@ -1,6 +1,7 @@
 import { supabase } from '../../lib/supabase'
 import type { PlanExerciseInput } from '../../lib/plan'
 import type { FamilyMember, FamilySession } from '../../lib/family'
+import type { ExerciseSession } from '../../lib/exercise-progress'
 
 const db = () => { if (!supabase) throw new Error('Supabase não configurado.'); return supabase }
 export type ActiveSession = { id:string; status:string; started_at:string; workout_session_exercises: Array<{id:string;exercise_name:string;position:number;planned_sets:number;planned_repetitions:string;rest_seconds:number;workout_sets:Array<{id?:string;set_number:number;load_kg:number|null;repetitions:number;completed_at:string|null}>}> }
@@ -21,6 +22,11 @@ export async function cancelWorkout(id:string){const {error}=await db().from('wo
 export async function addWorkoutSet(sessionExerciseId:string,setNumber:number){const {data,error}=await db().from('workout_sets').insert({session_exercise_id:sessionExerciseId,set_number:setNumber,repetitions:0}).select().single();if(error)throw error;return data}
 export async function removeWorkoutSet(sessionExerciseId:string,setNumber:number){const {error}=await db().from('workout_sets').delete().eq('session_exercise_id',sessionExerciseId).eq('set_number',setNumber).is('completed_at',null);if(error)throw error}
 export async function listWorkoutHistory(){const client=db();const {data:{user}}=await client.auth.getUser();if(!user)return[];const {data,error}=await client.from('workout_sessions').select('id,status,started_at,completed_at,plan_snapshot,workout_session_exercises(exercise_name,position,planned_repetitions,notes,workout_sets(set_number,completed_at,load_kg,repetitions))').eq('owner_id',user.id).in('status',['completed','cancelled']).order('started_at',{ascending:false});if(error)throw error;return data}
+export async function listExerciseProgress(exerciseId: string): Promise<ExerciseSession[]> {
+  const { data, error } = await db().from('workout_session_exercises').select('workout_sessions!inner(id,started_at,status),workout_sets(completed_at,load_kg,repetitions)').eq('exercise_id', exerciseId).eq('workout_sessions.status', 'completed')
+  if (error) throw error
+  return (data ?? []).map((entry: any) => ({ sessionId: entry.workout_sessions.id, startedAt: entry.workout_sessions.started_at, sets: entry.workout_sets }))
+}
 export async function listFamilyProgress(): Promise<{ members: FamilyMember[]; sessions: FamilySession[] }> {
   const client = db()
   const { data: { user } } = await client.auth.getUser()
