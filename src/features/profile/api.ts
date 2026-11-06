@@ -1,6 +1,7 @@
 import { supabase } from '../../lib/supabase'
 import { buildPersonalExport } from '../../lib/personal-export'
 import { defaultWorkoutPreferences, normalizeWorkoutPreferences, type WorkoutPreferences } from '../../lib/workout-preferences'
+import { passwordValidationMessage } from '../../lib/password-rules'
 
 type Profile = { id: string; display_name: string; avatar_path: string | null }
 
@@ -53,7 +54,8 @@ export async function getProfileAvatarUrl(path: string) {
 export async function changeOwnPassword(currentPassword: string, newPassword: string, recoveryMode = false) {
   const user = await currentUser()
   if (!user.email) throw new Error('Não foi possível confirmar o e-mail da conta.')
-  if (newPassword.length < 8) throw new Error('A nova senha precisa ter pelo menos 8 caracteres.')
+  const passwordError = passwordValidationMessage(newPassword)
+  if (passwordError) throw new Error(passwordError)
   if (!recoveryMode) {
     const { error: verificationError } = await client().auth.signInWithPassword({ email: user.email, password: currentPassword })
     if (verificationError) throw new Error('A senha atual está incorreta.')
